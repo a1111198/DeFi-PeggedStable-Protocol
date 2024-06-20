@@ -6,6 +6,7 @@ import {DeployDSC} from "../../script/DeployDSC.s.sol";
 import {DSCEngine} from "../../src/DSCEngine.sol";
 import {DecentralizedStableCoin} from "../../src/DecentralizedStableCoin.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
+import {ERC20Mock} from "@openzepplin/contracts/mocks/ERC20Mock.sol";
 
 contract DSCEngineTest is Test {
     DecentralizedStableCoin dsc;
@@ -15,6 +16,9 @@ contract DSCEngineTest is Test {
     address s_wethPriceFeedAddress;
     address s_wBTCAddress;
     address s_wBTCPriceFeedAddress;
+    address USER = makeAddr("user");
+    uint256 public constant APPROVE_COLLATERAL_AMOUNT = 10 ether;
+    uint256 public constant INITIAL_WETH_AMOUNT = 10 ether;
 
     function setUp() external {
         DeployDSC deployDSC = new DeployDSC();
@@ -26,9 +30,10 @@ contract DSCEngineTest is Test {
             s_wBTCPriceFeedAddress,
 
         ) = helperConfig.activeHelperConfiguration();
+        ERC20Mock(s_wethAddress).mint(USER, INITIAL_WETH_AMOUNT);
     }
 
-    /// Price test ///
+    ////// Price test ///////
     function testGetPriceInUSD() external view {
         //arrange act assert
         uint256 ethAmount = 15 ether;
@@ -38,5 +43,18 @@ contract DSCEngineTest is Test {
             ethAmount
         );
         assertEq(actualAmount, expectedAmount);
+    }
+
+    ////// Deposit Colletral test ///////
+    function testRevertIfColletralIsZero() external {
+        vm.startPrank(USER);
+        ERC20Mock(s_wethAddress).approveInternal(
+            USER,
+            address(dscEngine),
+            APPROVE_COLLATERAL_AMOUNT
+        );
+        vm.expectRevert(DSCEngine.DSCEngine__MustBeNonZeroAmount.selector);
+        dscEngine.depositCollateral(s_wethAddress, 0);
+        vm.stopPrank();
     }
 }

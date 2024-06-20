@@ -27,6 +27,7 @@ import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
 import {ReentrancyGuard} from "@openzepplin/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "@openzepplin/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+
 /**
  * @title DSCEngine
  * @author Akash Bansal
@@ -78,7 +79,16 @@ contract DSCEngine is ReentrancyGuard {
     // Events            //
     ////////////////////////
 
-    event ColletralDeposited(address indexed, address indexed, uint256);
+    event ColletralDeposited(
+        address indexed user,
+        address indexed tokenAddress,
+        uint256 amount
+    );
+    event CollateralReedemed(
+        address indexed user,
+        address indexed tokenAddress,
+        uint256 amount
+    );
 
     ////////////////////////
     //Modifiers          //
@@ -92,7 +102,8 @@ contract DSCEngine is ReentrancyGuard {
     }
 
     modifier onlyAllowedTokens(address colletralAddress) {
-        if (s_priceFeed[colletralAddress] == address(0)) revert DSCEngine__ColletralNotAllowed();
+        if (s_priceFeed[colletralAddress] == address(0))
+            revert DSCEngine__ColletralNotAllowed();
         _;
     }
 
@@ -141,8 +152,21 @@ contract DSCEngine is ReentrancyGuard {
     ////////////////////////
     //Functions External //
     ////////////////////////
+    /**
+     * @notice Deposits collateral and mints DSC
+     * @param collateralTokenAddress The address of the token contract to be used as collateral
+     * @param amountOfCollateral The amount of the collateral token to deposit
+     * @param dscAmountToMint The amount of DSC to mint
+     */
 
-    function depositCollateralAndMintDSC() external {}
+    function depositCollateralAndMintDSC(
+        address collateralTokenAddress,
+        uint256 amountOfCollateral,
+        uint256 dscAmountToMint
+    ) external {
+        depositCollateral(collateralTokenAddress, amountOfCollateral);
+        mintDSC(dscAmountToMint);
+    }
 
     /**
      * @notice Deposits a specified amount of collateral into the DSC system.
@@ -155,21 +179,41 @@ contract DSCEngine is ReentrancyGuard {
      * @param amountOfCollateral The amount of the collateral token to deposit.
      * This value should be specified in the smallest unit of the token (e.g., wei for WETH).
      */
-    function depositCollateral(address collateralTokenAddress, uint256 amountOfCollateral)
-        external
+    function depositCollateral(
+        address collateralTokenAddress,
+        uint256 amountOfCollateral
+    )
+        public
         nonZeroAmount(amountOfCollateral)
         onlyAllowedTokens(collateralTokenAddress)
         nonReentrant
     {
-        s_colletralDeposited[msg.sender][collateralTokenAddress] += amountOfCollateral;
-        emit ColletralDeposited(msg.sender, collateralTokenAddress, amountOfCollateral);
-        bool status = IERC20(collateralTokenAddress).transferFrom(msg.sender, address(this), amountOfCollateral);
+        s_colletralDeposited[msg.sender][
+            collateralTokenAddress
+        ] += amountOfCollateral;
+        emit ColletralDeposited(
+            msg.sender,
+            collateralTokenAddress,
+            amountOfCollateral
+        );
+        bool status = IERC20(collateralTokenAddress).transferFrom(
+            msg.sender,
+            address(this),
+            amountOfCollateral
+        );
         if (!status) {
             revert DSCEngine__TransferFromFailed();
         }
     }
 
-    function mintDSC(uint256 dscAmountToMint) external nonZeroAmount(dscAmountToMint) nonReentrant {
+    /**
+     * @notice Mints DSC tokens to the user
+     * @param dscAmountToMint The amount of DSC to mint
+     */
+
+    function mintDSC(
+        uint256 dscAmountToMint
+    ) public nonZeroAmount(dscAmountToMint) nonReentrant {
         s_dscMinted[msg.sender] = dscAmountToMint;
         // Check If the HealFactor is Ok
         _revertIfHealthFactorIsBroken(msg.sender);
@@ -179,24 +223,94 @@ contract DSCEngine is ReentrancyGuard {
         }
     }
 
-    function redeemCollateralForDSC() external {}
+    /**
+     * @notice Redeems collateral for DSC and burns the specified amount of DSC.
+     * @param collateralTokenAddress The address of the token contract to be redeemed as collateral.
+     * @param amountOfCollateralToRedeem The amount of collateral to redeem.
+     * @param dscAmountToBurn The amount of DSC to burn.
+     * @dev Ensures health factor maintenance after the transaction.
+     */
+    function redeemCollateralForDSC(
+        address collateralTokenAddress,
+        uint256 amountOfCollateralToRedeem,
+        uint256 dscAmountToBurn
+    ) external {
+        burnDSC(dscAmountToBurn);
+        redeemCollateral(collateralTokenAddress, amountOfCollateralToRedeem);
+        // No need to check health factor again.
+        // No need to emit event again as it has been emitted.
+    }
 
-    function redeemCollateral() external {}
+    /**
+     * @notice Redeems a specified amount of collateral from the DSC system.
+     * @param collateralTokenAddress The address of the token contract to be redeemed as collateral.
+     * @param amountOfCollateralToRedeem The amount of collateral to redeem.
+     * @dev Checks if the sender's balance is sufficient and maintains health factor after transfer.
+     */
+    function redeemCollateral(
+        address collateralTokenAddress,
+        uint256 amountOfCollateralToRedeem
+    ) public nonZeroAmount(amountOfCollateralToRedeem) nonReentrant {
+        // Here balance will be checked by Solidity SafeMath by default
+        s_colletralDeposited[msg.sender][
+            collateralTokenAddress
+        ] -= amountOfCollateralToRedeem;
+        emit CollateralReedemed(
+            msg.sender,
+            collateralTokenAddress,
+            amountOfCollateralToRedeem
+        );
+        bool _success = IERC20(collateralTokenAddress).transfer(
+            msg.sender,
+            amountOfCollateralToRedeem
+        );
+        if (!_success) {
+            revert DSCEngine__TransferFromFailed();
+        }
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
-    function burnDSC() external {}
+    /**
+     * @notice Burns a specified amount of DSC tokens.
+     * @param dscAmountToBurn The amount of DSC to burn.
+     * @dev Transfers DSC from the sender to the contract and then burns it.
+     * Ensures health factor is maintained after burning DSC.
+     */
+    function burnDSC(
+        uint256 dscAmountToBurn
+    ) public nonZeroAmount(dscAmountToBurn) {
+        s_dscMinted[msg.sender] -= dscAmountToBurn;
+        bool _success = i_dscContract.transferFrom(
+            msg.sender,
+            address(this),
+            dscAmountToBurn
+        );
+        if (!_success) {
+            revert DSCEngine__TransferFromFailed();
+        }
+        i_dscContract.burn(dscAmountToBurn);
+        _revertIfHealthFactorIsBroken(msg.sender); // unlikely to hit anyway
+    }
 
     function liquidate() external {}
 
     function getHealthFactor() external {}
+
     ////////////////////////
     //Functions Internal  //
     ////////////////////////
 
-    function _getHealthFactor(address user) private view returns (uint256 userHelthFactor) {
+    function _getHealthFactor(
+        address user
+    ) private view returns (uint256 userHelthFactor) {
         // total DSC minted.
         // totalColletralValueInUSD
-        (uint256 dscMinted, uint256 totalColleteralValueInUSD) = getAccountInformation(user);
-        uint256 adjustedColleteralValueInUSD = (totalColleteralValueInUSD * LIQUIDITY_THRESHOLD) / LIQUIDITY_PRECESION;
+        (
+            uint256 dscMinted,
+            uint256 totalColleteralValueInUSD
+        ) = getAccountInformation(user);
+        uint256 adjustedColleteralValueInUSD = (totalColleteralValueInUSD *
+            LIQUIDITY_THRESHOLD) / LIQUIDITY_PRECESION;
         userHelthFactor = adjustedColleteralValueInUSD / dscMinted;
     }
 
@@ -206,26 +320,46 @@ contract DSCEngine is ReentrancyGuard {
             revert DSCEngine__HealthFactorBroke(userHealthFactor);
         }
     }
+
     //////////////////////////
     //Functions public view //
     //////////////////////////
 
-    function getTotalColleteralValueInUSD(address user) public view returns (uint256 totalColleteralValueInUSD) {
+    function getTotalColleteralValueInUSD(
+        address user
+    ) public view returns (uint256 totalColleteralValueInUSD) {
         uint256 allAcceptableColletralsLength = allAcceptableColletrals.length;
 
         for (uint256 i = 0; i < allAcceptableColletralsLength; i++) {
-            uint256 amountOfColletral = s_colletralDeposited[user][allAcceptableColletrals[i]];
-            totalColleteralValueInUSD += getPriceInUSD(s_priceFeed[allAcceptableColletrals[i]], amountOfColletral);
+            uint256 amountOfColletral = s_colletralDeposited[user][
+                allAcceptableColletrals[i]
+            ];
+            totalColleteralValueInUSD += getPriceInUSD(
+                s_priceFeed[allAcceptableColletrals[i]],
+                amountOfColletral
+            );
         }
     }
 
-    function getPriceInUSD(address _priceFeedAddress, uint256 _amount) public view returns (uint256 valueInUSD) {
-        AggregatorV3Interface priceFeedInterface = AggregatorV3Interface(_priceFeedAddress);
-        (, int256 pertokenValueInUSD,,,) = priceFeedInterface.latestRoundData();
-        valueInUSD = (uint256(pertokenValueInUSD) * ADDITIONAL_DECIMAL_PRECISION * _amount) / PRECISION;
+    function getPriceInUSD(
+        address _priceFeedAddress,
+        uint256 _amount
+    ) public view returns (uint256 valueInUSD) {
+        AggregatorV3Interface priceFeedInterface = AggregatorV3Interface(
+            _priceFeedAddress
+        );
+        (, int256 pertokenValueInUSD, , , ) = priceFeedInterface
+            .latestRoundData();
+        valueInUSD =
+            (uint256(pertokenValueInUSD) *
+                ADDITIONAL_DECIMAL_PRECISION *
+                _amount) /
+            PRECISION;
     }
 
-    function getAccountInformation(address user)
+    function getAccountInformation(
+        address user
+    )
         public
         view
         returns (uint256 dscMinted, uint256 totalColleteralValueInUSD)
