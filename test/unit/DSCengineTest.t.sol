@@ -22,6 +22,12 @@ contract DSCEngineTest is Test {
     uint256 public constant APPROVE_COLLATERAL_AMOUNT = 10 ether;
     uint256 public constant INITIAL_WETH_AMOUNT = 10 ether;
     uint256 public constant INITIAL_WETH_DEPOSIT_AMOUNT = 1 ether;
+    uint256 public constant INITIAL_DSC_MINT_AMOUNT = 1000 ether;
+    event ColletralDeposited(
+        address indexed user,
+        address indexed tokenAddress,
+        uint256 amount
+    );
 
     function setUp() external {
         DeployDSC deployDSC = new DeployDSC();
@@ -118,7 +124,6 @@ contract DSCEngineTest is Test {
     ////// Deposit Colletral test ///////
     function testRevertIfColletralIsZero() external {
         vm.startPrank(USER);
-
         ERC20Mock(s_wethAddress).approveInternal(
             USER,
             address(dscEngine),
@@ -143,7 +148,7 @@ contract DSCEngineTest is Test {
     }
 
     modifier depositColletral() {
-        vm.startBroadcast(USER);
+        vm.startPrank(USER);
         ERC20Mock(s_wethAddress).approveInternal(
             USER,
             address(dscEngine),
@@ -171,4 +176,73 @@ contract DSCEngineTest is Test {
     }
 
     ////// Mint Function test ///////
+    function testRevertIfMintingAmountIsZero() external {
+        vm.expectRevert(DSCEngine.DSCEngine__MustBeNonZeroAmount.selector);
+        dscEngine.mintDSC(0);
+    }
+
+    function testRevertIfHealthFactorIsbroken() external depositColletral {
+        vm.startPrank(USER);
+        bytes4 selector = bytes4(
+            keccak256("DSCEngine__HealthFactorBroke(uint256)")
+        );
+        vm.expectRevert(abi.encodeWithSelector(selector, 5e17));
+        dscEngine.mintDSC(2000 ether);
+        vm.stopPrank();
+    }
+
+    function testMintIfEverythingIsOk() external depositColletral {
+        vm.startPrank(USER);
+        (uint256 dscMintedBefore, ) = dscEngine.getAccountInformation(USER);
+        dscEngine.mintDSC(INITIAL_DSC_MINT_AMOUNT);
+        (uint256 dscMinteAfter, ) = dscEngine.getAccountInformation(USER);
+        assertEq(dscMinteAfter, dscMintedBefore + INITIAL_DSC_MINT_AMOUNT);
+    }
+
+    //////  Deposit Colletral and Mint Function test ///////
+
+    function testdepositCollateralAndMintDSCAndEventEmission() external {
+        vm.startPrank(USER);
+        (uint256 dscMintedBefore, uint256 colletralValueInUSDBefore) = dscEngine
+            .getAccountInformation(USER);
+        ERC20Mock(s_wethAddress).approveInternal(
+            USER,
+            address(dscEngine),
+            APPROVE_COLLATERAL_AMOUNT
+        );
+        address emitterAddress = address(dscEngine);
+
+        vm.expectEmit(true, true, true, true, emitterAddress);
+        emit ColletralDeposited(
+            USER,
+            s_wethAddress,
+            INITIAL_WETH_DEPOSIT_AMOUNT
+        );
+        dscEngine.depositCollateralAndMintDSC(
+            s_wethAddress,
+            INITIAL_WETH_DEPOSIT_AMOUNT,
+            INITIAL_DSC_MINT_AMOUNT
+        );
+        (uint256 dscMintedAfter, uint256 colletralValueInUSDAfter) = dscEngine
+            .getAccountInformation(USER);
+        assertEq(dscMintedAfter, dscMintedBefore + INITIAL_DSC_MINT_AMOUNT);
+        assertEq(
+            colletralValueInUSDAfter,
+            colletralValueInUSDBefore +
+                dscEngine.getTotalColleteralValueInUSD(USER)
+        );
+        vm.stopPrank();
+    }
+
+    modifier depositCollateralAndMintDSC() {
+        vm.startPrank(USER);
+        ERC20Mock(s_wethAddress).approveInternal(
+            USER,
+            address(dscEngine),
+            APPROVE_COLLATERAL_AMOUNT
+        );
+        dscEngine.depositCollateral(s_wethAddress, INITIAL_WETH_DEPOSIT_AMOUNT);
+        dscEngine.mintDSC(INITIAL_DSC_MINT_AMOUNT);
+        _;
+    }
 }

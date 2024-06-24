@@ -27,6 +27,7 @@ import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
 import {ReentrancyGuard} from "@openzepplin/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "@openzepplin/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {Script, console} from "forge-std/Script.sol";
 
 /**
  * @title DSCEngine
@@ -48,7 +49,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
  * @notice This contract is very loosely based on the MakerDAO DSS (DAI) system, incorporating similar concepts but with simplified governance and fee structures.
  */
 
-contract DSCEngine is ReentrancyGuard {
+contract DSCEngine is ReentrancyGuard, Script {
     ////////////////////////
     //Errors             //
     ////////////////////////
@@ -384,8 +385,8 @@ contract DSCEngine is ReentrancyGuard {
         uint256 adjustedColleteralValueInUSD = (totalColleteralValueInUSD *
             LIQUIDITY_THRESHOLD) / LIQUIDITY_PRECESION;
         userHelthFactor =
-            (adjustedColleteralValueInUSD / dscMinted) *
-            PRECISION;
+            (adjustedColleteralValueInUSD * PRECISION) /
+            dscMinted;
     }
 
     function _revertIfHealthFactorIsBroken(address user) internal view {
