@@ -361,7 +361,6 @@ contract DSCEngine is ReentrancyGuard, Script {
         uint256 dscAmountToBurn
     ) internal {
         s_dscMinted[onBehalfOf] -= dscAmountToBurn;
-        s_dscMinted[dscFrom] -= dscAmountToBurn; // I am not very sure about it but I believ it should be there
         bool _success = i_dscContract.transferFrom(
             dscFrom,
             address(this),
@@ -382,6 +381,9 @@ contract DSCEngine is ReentrancyGuard, Script {
             uint256 dscMinted,
             uint256 totalColleteralValueInUSD
         ) = _getAccountInformation(user);
+        if (dscMinted == 0) {
+            return type(uint256).max;
+        }
         uint256 adjustedColleteralValueInUSD = (totalColleteralValueInUSD *
             LIQUIDITY_THRESHOLD) / LIQUIDITY_PRECESION;
         userHelthFactor =
@@ -396,20 +398,19 @@ contract DSCEngine is ReentrancyGuard, Script {
         }
     }
 
+    //////////////////////////
+    //Functions public view //
+    //////////////////////////
     function _getAccountInformation(
         address user
     )
-        public
+        internal
         view
         returns (uint256 dscMinted, uint256 totalColleteralValueInUSD)
     {
         dscMinted = s_dscMinted[user];
         totalColleteralValueInUSD = getTotalColleteralValueInUSD(user);
     }
-
-    //////////////////////////
-    //Functions public view //
-    //////////////////////////
 
     function getTotalColleteralValueInUSD(
         address user
