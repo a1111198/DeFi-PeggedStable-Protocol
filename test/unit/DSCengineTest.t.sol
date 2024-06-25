@@ -9,6 +9,7 @@ import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {ERC20Mock} from "@openzepplin/contracts/mocks/ERC20Mock.sol";
 import {MockFailedTransferFrom} from "../mocks/MockFailedTransferFroms.sol";
 import {MockFailedTransfer} from "../mocks/MockFailedTransfer.sol";
+import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
 contract DSCEngineTest is Test {
     DecentralizedStableCoin dsc;
@@ -400,5 +401,22 @@ contract DSCEngineTest is Test {
         );
         assertEq(dsc.balanceOf(USER), 0);
         assertEq(ERC20Mock(s_wethAddress).balanceOf(USER), INITIAL_WETH_AMOUNT);
+    }
+
+    // Health Factor tests//
+    function testIfHealthFactorIsOk() external depositCollateralAndMintDSC {
+        uint256 expectedHealthFactor = 1 ether;
+        uint256 actualHealthFactor = dscEngine.getHealthFactor(USER);
+        assertEq(expectedHealthFactor, actualHealthFactor);
+    }
+
+    function testHealthFactorPrcecison() external depositCollateralAndMintDSC {
+        int256 ethUsdUpdatedPrice = 1800e8; // 1 ETH = $1800
+        // Rememeber, we need $200 at all times if we have $100 of debt
+
+        MockV3Aggregator(s_wethPriceFeedAddress).updateAnswer(
+            ethUsdUpdatedPrice
+        );
+        assertEq(dscEngine.getHealthFactor(USER), 0.9 ether);
     }
 }

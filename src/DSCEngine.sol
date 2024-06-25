@@ -325,7 +325,9 @@ contract DSCEngine is ReentrancyGuard, Script {
         // Also checking that HealthFactor is not broken for the sender by this activity.
     }
 
-    function getHealthFactor() external {}
+    function getHealthFactor(address user) public view returns (uint256) {
+        return _getHealthFactor(user);
+    }
 
     ////////////////////////
     //Functions Internal  //
