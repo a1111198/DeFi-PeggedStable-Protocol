@@ -8,6 +8,7 @@ import {DecentralizedStableCoin} from "../../src/DecentralizedStableCoin.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {ERC20Mock} from "@openzepplin/contracts/mocks/ERC20Mock.sol";
 import {MockFailedTransferFrom} from "../mocks/MockFailedTransferFroms.sol";
+import {MockFailedTransfer} from "../mocks/MockFailedTransfer.sol";
 
 contract DSCEngineTest is Test {
     DecentralizedStableCoin dsc;
@@ -26,6 +27,12 @@ contract DSCEngineTest is Test {
     uint256 public constant INITIAL_DSC_MINT_AMOUNT = 1000 ether;
     event ColletralDeposited(
         address indexed user,
+        address indexed tokenAddress,
+        uint256 amount
+    );
+    event CollateralReedemed(
+        address indexed redeemedFrom,
+        address indexed redeemedTo,
         address indexed tokenAddress,
         uint256 amount
     );
@@ -316,5 +323,82 @@ contract DSCEngineTest is Test {
         dscEngine.burnDSC(INITIAL_DSC_MINT_AMOUNT);
         vm.stopPrank();
         assertEq(dsc.balanceOf(USER), 0);
+    }
+
+    //////  Redeem DSC test  ///////
+    function testRevertIfRedeeMColletralIsZero()
+        external
+        depositCollateralAndMintDSC
+    {
+        vm.expectRevert(DSCEngine.DSCEngine__MustBeNonZeroAmount.selector);
+        dscEngine.redeemCollateral(s_wethAddress, 0);
+    }
+
+    function testCanRedeemColletral() external depositColletral {
+        vm.startPrank(USER);
+        dscEngine.redeemCollateral(s_wethAddress, INITIAL_WETH_DEPOSIT_AMOUNT);
+        uint256 userBalanceAfter = ERC20Mock(s_wethAddress).balanceOf(USER);
+        assertEq(userBalanceAfter, INITIAL_WETH_AMOUNT);
+    }
+
+    function testCanRedeemColletralEventCheck() external depositColletral {
+        vm.startPrank(USER);
+        address emitterAddress = address(dscEngine);
+        vm.expectEmit(true, true, true, true, emitterAddress);
+        emit CollateralReedemed(
+            USER,
+            USER,
+            s_wethAddress,
+            INITIAL_WETH_DEPOSIT_AMOUNT
+        );
+        dscEngine.redeemCollateral(s_wethAddress, INITIAL_WETH_DEPOSIT_AMOUNT);
+    }
+
+    function testRevertsRedeemColleteralIfTransferFails() public {
+        // Arrange - Setup
+        address owner = msg.sender;
+        vm.prank(owner);
+        MockFailedTransfer mockWethFailed = new MockFailedTransfer();
+        tokenAddresses = [address(mockWethFailed)];
+        priceFeedAddresses = [s_wethPriceFeedAddress];
+        vm.prank(owner);
+        DSCEngine mockDsce = new DSCEngine(
+            tokenAddresses,
+            priceFeedAddresses,
+            address(dsc)
+        );
+        mockWethFailed.mint(USER, INITIAL_WETH_AMOUNT);
+        // Arrange - User
+        vm.startPrank(USER);
+        ERC20Mock(address(mockWethFailed)).approve(
+            address(mockDsce),
+            APPROVE_COLLATERAL_AMOUNT
+        );
+        mockDsce.depositCollateral(
+            address(mockWethFailed),
+            INITIAL_WETH_DEPOSIT_AMOUNT
+        );
+        vm.expectRevert(DSCEngine.DSCEngine__TransferFailed.selector);
+        mockDsce.redeemCollateral(
+            address(mockWethFailed),
+            INITIAL_WETH_DEPOSIT_AMOUNT
+        );
+        vm.stopPrank();
+    }
+
+    ////// Burn DSC and Redeem DSC test  ///////
+    function testburnDSCAndredeemCollateral()
+        external
+        depositCollateralAndMintDSC
+    {
+        vm.startPrank(USER);
+        dsc.approve(address(dscEngine), INITIAL_DSC_MINT_AMOUNT);
+        dscEngine.burnDSCAndredeemCollateral(
+            s_wethAddress,
+            INITIAL_WETH_DEPOSIT_AMOUNT,
+            INITIAL_DSC_MINT_AMOUNT
+        );
+        assertEq(dsc.balanceOf(USER), 0);
+        assertEq(ERC20Mock(s_wethAddress).balanceOf(USER), INITIAL_WETH_AMOUNT);
     }
 }

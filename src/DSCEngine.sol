@@ -58,6 +58,7 @@ contract DSCEngine is ReentrancyGuard, Script {
     error DSCEngine__TokenArrayIsEmpty();
     error DSCEngine__ColletralNotAllowed();
     error DSCEngine__TransferFromFailed();
+    error DSCEngine__TransferFailed();
     error DSCEngine__HealthFactorBroke(uint256 healthFactor);
     error DSCEngine__DSCMintingFailed();
     error DSCEngine__CanNotLiquiateDueToHealthyHealthFactor(
@@ -349,7 +350,7 @@ contract DSCEngine is ReentrancyGuard, Script {
             amountOfCollateralToRedeem
         );
         if (!_success) {
-            revert DSCEngine__TransferFromFailed();
+            revert DSCEngine__TransferFailed();
         }
     }
 
