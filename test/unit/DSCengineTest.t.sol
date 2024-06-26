@@ -22,6 +22,7 @@ contract DSCEngineTest is Test {
     address[] s_colletralTokenAddresses;
     address[] s_priceFeedAddress;
     address USER = makeAddr("user");
+    address LIQUIDATOR = makeAddr("liquidator ");
     uint256 public constant APPROVE_COLLATERAL_AMOUNT = 10 ether;
     uint256 public constant INITIAL_WETH_AMOUNT = 10 ether;
     uint256 public constant INITIAL_WETH_DEPOSIT_AMOUNT = 1 ether;
@@ -403,7 +404,7 @@ contract DSCEngineTest is Test {
         assertEq(ERC20Mock(s_wethAddress).balanceOf(USER), INITIAL_WETH_AMOUNT);
     }
 
-    // Health Factor tests//
+    ///// Health Factor tests/////
     function testIfHealthFactorIsOk() external depositCollateralAndMintDSC {
         uint256 expectedHealthFactor = 1 ether;
         uint256 actualHealthFactor = dscEngine.getHealthFactor(USER);
@@ -418,5 +419,60 @@ contract DSCEngineTest is Test {
             ethUsdUpdatedPrice
         );
         assertEq(dscEngine.getHealthFactor(USER), 0.9 ether);
+    }
+
+    ///// Liquidity Functions tests /////
+    function testLiquidateForZeroAmount() external depositCollateralAndMintDSC {
+        vm.expectRevert(DSCEngine.DSCEngine__MustBeNonZeroAmount.selector);
+        dscEngine.liquidate(s_wethAddress, USER, 0);
+    }
+
+    function testRevertHealthFactorIsAlreadyHealthy()
+        external
+        depositCollateralAndMintDSC
+    {
+        uint256 initailHealthFactror = dscEngine.getHealthFactor(USER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DSCEngine
+                    .DSCEngine__CanNotLiquiateDueToHealthyHealthFactor
+                    .selector,
+                initailHealthFactror
+            )
+        );
+        dscEngine.liquidate(s_wethAddress, USER, 1 ether);
+    }
+
+    function testCanLiquidateSomeOnesAccount()
+        external
+        depositCollateralAndMintDSC
+    {
+        vm.startPrank(LIQUIDATOR);
+        ERC20Mock(s_wethAddress).mint(LIQUIDATOR, INITIAL_WETH_DEPOSIT_AMOUNT);
+        ERC20Mock(s_wethAddress).approve(
+            address(dscEngine),
+            APPROVE_COLLATERAL_AMOUNT
+        );
+        dscEngine.depositCollateralAndMintDSC(
+            s_wethAddress,
+            INITIAL_WETH_DEPOSIT_AMOUNT,
+            INITIAL_DSC_MINT_AMOUNT
+        );
+        int256 ethUsdUpdatedPrice = 1800e8; // 1 ETH = $1800
+        MockV3Aggregator(s_wethPriceFeedAddress).updateAnswer(
+            ethUsdUpdatedPrice
+        );
+        uint256 debtAmountToRecoverToMaintainHealthFactor = 100 ether;
+        ERC20Mock(address(dsc)).approve(address(dscEngine), 100 ether);
+        dscEngine.liquidate(
+            s_wethAddress,
+            USER,
+            debtAmountToRecoverToMaintainHealthFactor
+        );
+        uint256 liquidatorBalance = ERC20Mock(address(s_wethAddress)).balanceOf(
+            LIQUIDATOR
+        );
+        uint256 hardCodedExpected = 6_111_111_111_111_111_0;
+        assertEq(liquidatorBalance, hardCodedExpected);
     }
 }
