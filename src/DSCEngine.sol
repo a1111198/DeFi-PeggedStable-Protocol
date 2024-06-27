@@ -338,9 +338,19 @@ contract DSCEngine is ReentrancyGuard, Script {
         address collateralTokenAddress,
         uint256 amountOfCollateralToRedeem
     ) internal {
-        s_colletralDeposited[from][
+        uint256 userColletralAmount = s_colletralDeposited[from][
             collateralTokenAddress
-        ] -= amountOfCollateralToRedeem;
+        ];
+        console.log("DSC_USER_COLLETRAL", userColletralAmount);
+        console.log("DSC_AMOUNT_TOREDEEM", amountOfCollateralToRedeem);
+
+        s_colletralDeposited[from][collateralTokenAddress] =
+            userColletralAmount -
+            amountOfCollateralToRedeem;
+        console.log(
+            "DSC AFTER AMOUNT",
+            s_colletralDeposited[from][collateralTokenAddress]
+        );
         emit CollateralReedemed(
             from,
             to,
