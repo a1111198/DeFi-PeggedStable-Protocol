@@ -67,13 +67,22 @@ contract Handler is Test {
     function mintDSC(uint256 dscAmount, uint256 senderAddressSeed) external {
         if (s_depositors.length == 0) return;
         address sender = s_depositors[senderAddressSeed % s_depositors.length];
-
         vm.startPrank(sender);
-
         (uint256 dscMinted, uint256 totalColleteralValueInUSD) = dscEngine
             .getAccountInformation(sender);
         mintCalled1++;
-        uint256 dscCanBeMinted = (totalColleteralValueInUSD / 2) - dscMinted;
+        console.log("ROUND", mintCalled);
+        console.log("DSC minted", dscMinted);
+        console.log("totla colleteral", totalColleteralValueInUSD);
+        uint256 colleteralToMaintainHealthFactor = (totalColleteralValueInUSD /
+            2);
+        console.log(
+            "totla colleteral maintain",
+            colleteralToMaintainHealthFactor
+        );
+        if (colleteralToMaintainHealthFactor <= dscMinted) return;
+        uint256 dscCanBeMinted = colleteralToMaintainHealthFactor - dscMinted;
+        console.log("CAN BE MINTED", dscCanBeMinted);
         mintCalled2++;
         dscAmount = bound(dscAmount, 0, dscCanBeMinted);
         mintCalled++;

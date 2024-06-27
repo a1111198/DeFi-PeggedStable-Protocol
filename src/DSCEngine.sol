@@ -222,7 +222,7 @@ contract DSCEngine is ReentrancyGuard, Script {
     function mintDSC(
         uint256 dscAmountToMint
     ) public nonZeroAmount(dscAmountToMint) nonReentrant {
-        s_dscMinted[msg.sender] = dscAmountToMint;
+        s_dscMinted[msg.sender] += dscAmountToMint;
         // Check If the HealFactor is Ok
         _revertIfHealthFactorIsBroken(msg.sender);
         bool minted = i_dscContract.mint(msg.sender, dscAmountToMint);

@@ -43,7 +43,7 @@ contract InvariantTests is StdInvariant, Test {
         targetContract(address(handler));
     }
 
-    function invariant_DscTotalDSCSupplyMustBeLessThanColletralValue28()
+    function invariant_DscTotalDSCSupplyMustBeLessThanColletralValue7()
         external
         view
     {
@@ -69,6 +69,7 @@ contract InvariantTests is StdInvariant, Test {
         // here overFlow may occure so it may fail:(totalDscSupply >= (wethInUSD + wbtcInUSD));
         // although solidity will handle it so would through a panic attack. but I want to run all cases and revert to be 0 ;
         //so to handle that;
+        //After doing it realised no Need of it as bound of colleteral is uint96 max so it wouldn't matter much as USD is 2000$ only
         if (totalDscSupply == 0) return;
         // to check overFlow
         if (wethInUSD > type(uint256).max - wbtcInUSD) {
