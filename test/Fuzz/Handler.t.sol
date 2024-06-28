@@ -4,6 +4,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {DSCEngine} from "../../src/DSCEngine.sol";
 import {DecentralizedStableCoin} from "../../src/DecentralizedStableCoin.sol";
 import {ERC20Mock} from "@openzepplin/contracts/mocks/ERC20Mock.sol";
+import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
 contract Handler is Test {
     DecentralizedStableCoin dsc;
@@ -16,6 +17,8 @@ contract Handler is Test {
     uint256 public mintCalled4;
     address[] public s_depositors;
     uint256 MAX_COLLETRAL_DEPOSIT = type(uint96).max;
+    MockV3Aggregator v3EthPriceFeedAggregator;
+    MockV3Aggregator v3BtcPriceFeedAggregator;
 
     constructor(DecentralizedStableCoin _dsc, DSCEngine _dscEngine) {
         dsc = _dsc;
@@ -24,12 +27,19 @@ contract Handler is Test {
         weth = ERC20Mock(colletralArray[0]);
 
         wbtc = ERC20Mock(colletralArray[1]);
+        v3EthPriceFeedAggregator = MockV3Aggregator(
+            dscEngine.getPriceFeed(address(weth))
+        );
+        v3BtcPriceFeedAggregator = MockV3Aggregator(
+            dscEngine.getPriceFeed(address(wbtc))
+        );
     }
 
     function depositColletral(
         uint256 colletralSeed,
         uint256 colleteralAmount
     ) external {
+        console.log("CALLED DEposit");
         ERC20Mock colleteral = _getColletralFromSeed(colletralSeed);
         colleteralAmount = bound(colleteralAmount, 1, MAX_COLLETRAL_DEPOSIT);
         vm.startPrank(msg.sender);
@@ -44,6 +54,7 @@ contract Handler is Test {
         uint256 colletralSeed,
         uint256 colleteralAmount
     ) external {
+        console.log("CALLED Redeem");
         vm.startPrank(msg.sender);
         ERC20Mock colleteral = _getColletralFromSeed(colletralSeed);
         uint256 max_redeem_Colleteral = dscEngine.getColletralValueOfaUser(
@@ -65,6 +76,7 @@ contract Handler is Test {
     }
 
     function mintDSC(uint256 dscAmount, uint256 senderAddressSeed) external {
+        console.log("CALLED Mint DSC");
         if (s_depositors.length == 0) return;
         address sender = s_depositors[senderAddressSeed % s_depositors.length];
         vm.startPrank(sender);
@@ -89,6 +101,35 @@ contract Handler is Test {
         if (dscAmount == 0) return;
         dscEngine.mintDSC(dscAmount);
     }
+
+    // If prices flutuates too much obvious protocol Invariant breaks in this case.
+
+    // function updatePriceFeed(uint96 ethPrice, uint96 btcPrice) external {
+    //     console.log("CALLED UPDATE PRICE FEED");
+    //     int256 _ethPrice = int256(uint256(ethPrice));
+    //     int256 _btcPrice = int256(uint256(btcPrice));
+    //     v3EthPriceFeedAggregator.updateAnswer(_ethPrice);
+    //     v3BtcPriceFeedAggregator.updateAnswer(_btcPrice);
+    // }
+
+    // function shouldNotRevertOnViewCalls(
+    //     address user,
+    //     uint256 colleteralSeed,
+    //     uint256 amount
+    // ) external view {
+    //     amount = bound(amount, 0, type(uint96).max);
+    //     ERC20Mock colleteral = _getColletralFromSeed(colleteralSeed);
+    //     dscEngine.getAccountInformation(user);
+    //     dscEngine.getAccountInformation(user);
+    //     dscEngine.getAllowedColletrals();
+    //     dscEngine.getColletralValueOfaUser(user, address(colleteral));
+    //     dscEngine.getDscContractAddress();
+    //     dscEngine.getHealthFactor(user);
+    //     dscEngine.getPriceFeed(address(colleteral));
+    //     dscEngine.getPriceInUSD(address(colleteral), amount);
+    //     dscEngine.getTokenValueFromUSD(address(colleteral), amount);
+    //     dscEngine.getTotalColleteralValueInUSD(user);
+    // }
 
     function _getColletralFromSeed(
         uint256 seed

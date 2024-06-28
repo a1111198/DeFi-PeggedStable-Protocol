@@ -26,8 +26,9 @@ pragma solidity ^0.8.19;
 import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
 import {ReentrancyGuard} from "@openzepplin/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "@openzepplin/contracts/token/ERC20/IERC20.sol";
-import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {Script, console} from "forge-std/Script.sol";
+import {OracleLib} from "./libraries/oracleLibrbray.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 /**
  * @title DSCEngine
@@ -66,8 +67,14 @@ contract DSCEngine is ReentrancyGuard, Script {
     );
     error DSCEngine__HealthFactorNotImproved();
     ////////////////////////
+    // Type    //
+    ////////////////////////
+    using OracleLib for AggregatorV3Interface;
+
+    ////////////////////////
     // State Variales     //
     ////////////////////////
+
     uint256 private constant ADDITIONAL_DECIMAL_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDITY_THRESHOLD = 50; // 200% OverCollatralised.
@@ -449,7 +456,7 @@ contract DSCEngine is ReentrancyGuard, Script {
             s_priceFeed[colletralAddress]
         );
         (, int256 pertokenValueInUSD, , , ) = priceFeedInterface
-            .latestRoundData();
+            .stalePriceCheck();
         return
             (usdAmountInWei * PRECISION) /
             (uint256(pertokenValueInUSD) * ADDITIONAL_DECIMAL_PRECISION);
@@ -463,7 +470,7 @@ contract DSCEngine is ReentrancyGuard, Script {
             _priceFeedAddress
         );
         (, int256 pertokenValueInUSD, , , ) = priceFeedInterface
-            .latestRoundData();
+            .stalePriceCheck();
         valueInUSD =
             (uint256(pertokenValueInUSD) *
                 ADDITIONAL_DECIMAL_PRECISION *

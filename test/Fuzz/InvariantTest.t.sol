@@ -43,7 +43,7 @@ contract InvariantTests is StdInvariant, Test {
         targetContract(address(handler));
     }
 
-    function invariant_DscTotalDSCSupplyMustBeLessThanColletralValue7()
+    function invariant_DscTotalDSCSupplyMustBeLessThanColletralValue4()
         external
         view
     {
